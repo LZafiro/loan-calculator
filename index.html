@@ -253,6 +253,7 @@
         // Variáveis globais
         let taxaSelicMensal = 0;
         let selicCarregada = false;
+        let historicoTaxasSelic = [];
         
         // Elementos DOM
         const statusContainer = document.getElementById('statusContainer');
@@ -267,9 +268,61 @@
         const btnAddTaxa = document.getElementById('addTaxa');
         const btnCalcular = document.getElementById('calcular');
         const resultadoDiv = document.getElementById('resultado');
+        const historicoSelicCheckbox = document.getElementById('historicoSelic');
+        const modoHistoricoContainer = document.getElementById('modoHistoricoContainer');
         
         /**
-         * Função para buscar a taxa Selic mensal da API do Banco Central do Brasil
+         * Função para buscar o histórico de taxas Selic mensais da API do Banco Central do Brasil
+         * @param {number} numMeses - Número de meses para buscar no histórico
+         * @returns {Promise<Array>} Array com taxas mensais em ordem cronológica (mais antiga primeiro)
+         */
+        async function buscarHistoricoTaxasSelic(numMeses) {
+            try {
+                // URL da API do Banco Central - Busca as taxas Selic acumuladas nos últimos N meses
+                const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.4390/dados/ultimos/${numMeses}?formato=json`;
+                
+                // Exibe mensagem de carregamento no console
+                console.log(`Buscando histórico de ${numMeses} meses da Taxa Selic...`);
+                
+                // Faz a requisição para a API
+                const response = await fetch(url);
+                
+                // Verifica se a resposta foi bem-sucedida
+                if (!response.ok) {
+                    throw new Error(`Erro na requisição: ${response.status} ${response.statusText}`);
+                }
+                
+                // Converte a resposta para JSON
+                const data = await response.json();
+                
+                // Verifica se há dados
+                if (!data || !data.length) {
+                    throw new Error('Nenhum dado recebido da API');
+                }
+                
+                console.log(`Recebidos ${data.length} meses de histórico da Taxa Selic`);
+                
+                // Converte os valores para decimal e inverte a ordem (mais antiga primeiro)
+                const historicoTaxas = data
+                    .map(item => ({
+                        data: item.data,
+                        valor: parseFloat(item.valor) / 100 // Converte para decimal
+                    }))
+                    .reverse(); // Inverte a ordem (a API retorna do mais recente para o mais antigo)
+                
+                return historicoTaxas;
+            } catch (error) {
+                console.error('Erro ao buscar histórico de taxas Selic:', error);
+                errorMessage.textContent = `Erro ao buscar histórico de taxas: ${error.message}. Usando taxas padrão.`;
+                errorMessage.style.display = 'block';
+                
+                // Em caso de erro, retorna um array com taxas padrão
+                return Array(numMeses).fill(0.009); // 0,90% como taxa padrão
+            }
+        }
+        
+        /**
+         * Função para buscar a taxa Selic mensal atual da API do Banco Central do Brasil
          */
         async function buscarTaxaSelicMensal() {
             try {
