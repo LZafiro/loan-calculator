@@ -231,6 +231,7 @@
         <div class="form-group">
             <label for="parcelaAtual">Número da parcela atual:</label>
             <input type="number" id="parcelaAtual" min="1" step="1" value="10">
+            <p class="info-text">Suporte para qualquer número de parcelas - histórico ilimitado.</p>
         </div>
         
         <div class="form-group">
@@ -251,7 +252,7 @@
                 <input type="checkbox" id="historicoSelic" checked> 
                 Usar histórico da Selic automaticamente
             </label>
-            <p class="info-text">Quando selecionado, o sistema buscará automaticamente o histórico de taxas Selic mensais do Banco Central do Brasil.</p>
+            <p class="info-text">Quando selecionado, o sistema buscará automaticamente o histórico de taxas Selic mensais do Banco Central do Brasil para todos os meses anteriores necessários.</p>
         </div>
         
         <div id="historicoManualContainer" class="form-group" style="display: none;">
@@ -331,41 +332,14 @@
          */
         async function buscarHistoricoTaxasSelic(numMeses) {
             try {
-                // URL da API do Banco Central - Busca as taxas Selic acumuladas nos últimos N meses
-                const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.4390/dados/ultimos/${numMeses}?formato=json`;
-                
-                // Exibe mensagem de carregamento no console
-                console.log(`Buscando histórico de ${numMeses} meses da Taxa Selic...`);
-                
-                // Faz a requisição para a API
-                const response = await fetch(url);
-                
-                // Verifica se a resposta foi bem-sucedida
-                if (!response.ok) {
-                    throw new Error(`Erro na requisição: ${response.status} ${response.statusText}`);
+                // Verificar se a quantidade solicitada excede o limite da API
+                if (numMeses <= 20) {
+                    // Se for menos que 20 meses, usa o endpoint "ultimos"
+                    return await buscarUltimosMeses(numMeses);
+                } else {
+                    // Se for mais que 20 meses, usa o endpoint com intervalo de datas
+                    return await buscarPorIntervalo(numMeses);
                 }
-                
-                // Converte a resposta para JSON
-                const data = await response.json();
-                
-                // Verifica se há dados
-                if (!data || !data.length) {
-                    throw new Error('Nenhum dado recebido da API');
-                }
-                
-                console.log(`Recebidos ${data.length} meses de histórico da Taxa Selic`);
-                
-                // Converte os valores para decimal e inverte a ordem (mais antiga primeiro)
-                // A API retorna do mais recente para o mais antigo, então invertemos
-                // para ter a ordem cronológica correta (do mais antigo ao mais recente)
-                const historicoTaxas = data
-                    .map(item => ({
-                        data: item.data,
-                        valor: parseFloat(item.valor) / 100 // Converte para decimal
-                    }))
-                    .reverse(); 
-                
-                return historicoTaxas;
             } catch (error) {
                 console.error('Erro ao buscar histórico de taxas Selic:', error);
                 errorMessage.textContent = `Erro ao buscar histórico de taxas: ${error.message}. Usando taxas padrão.`;
@@ -379,6 +353,132 @@
                 
                 return taxasPadrao;
             }
+        }
+        
+        /**
+         * Busca os últimos N meses de taxas Selic (limitado a 20)
+         * @param {number} numMeses - Número de meses para buscar
+         * @returns {Promise<Array>} Array com as taxas
+         */
+        async function buscarUltimosMeses(numMeses) {
+            // URL da API do Banco Central - Busca as taxas Selic acumuladas nos últimos N meses
+            const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.4390/dados/ultimos/${numMeses}?formato=json`;
+            
+            console.log(`Buscando os últimos ${numMeses} meses da Taxa Selic...`);
+            
+            // Faz a requisição para a API
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`Erro na requisição: ${response.status} ${response.statusText}`);
+            }
+            
+            // Converte a resposta para JSON
+            const data = await response.json();
+            
+            if (!data || !data.length) {
+                throw new Error('Nenhum dado recebido da API');
+            }
+            
+            console.log(`Recebidos ${data.length} meses de histórico da Taxa Selic`);
+            
+            // Converte os valores para decimal e inverte a ordem (mais antiga primeiro)
+            const historicoTaxas = data
+                .map(item => ({
+                    data: item.data,
+                    valor: parseFloat(item.valor) / 100 // Converte para decimal
+                }))
+                .reverse(); // Inverte a ordem (a API retorna do mais recente para o mais antigo)
+            
+            return historicoTaxas;
+        }
+        
+        /**
+         * Busca as taxas Selic por intervalo de datas
+         * @param {number} numMeses - Número de meses necessários
+         * @returns {Promise<Array>} Array com as taxas
+         */
+        async function buscarPorIntervalo(numMeses) {
+            // Calcula as datas inicial e final para o intervalo
+            const dataFinal = new Date();
+            const dataInicial = new Date();
+            
+            // Retrocede a data inicial pelo número de meses necessários
+            // Adiciona uma margem para garantir que tenhamos dados suficientes (meses podem ter dias diferentes)
+            dataInicial.setMonth(dataInicial.getMonth() - (numMeses + 3));
+            
+            // Formata as datas no padrão brasileiro (DD/MM/AAAA)
+            const formatarData = (data) => {
+                const dia = String(data.getDate()).padStart(2, '0');
+                const mes = String(data.getMonth() + 1).padStart(2, '0');
+                const ano = data.getFullYear();
+                return `${dia}/${mes}/${ano}`;
+            };
+            
+            const dataInicialStr = formatarData(dataInicial);
+            const dataFinalStr = formatarData(dataFinal);
+            
+            // URL da API do Banco Central - Busca as taxas Selic por intervalo de datas
+            const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.4390/dados?formato=json&dataInicial=${dataInicialStr}&dataFinal=${dataFinalStr}`;
+            
+            console.log(`Buscando taxas Selic no intervalo de ${dataInicialStr} a ${dataFinalStr}...`);
+            
+            // Faz a requisição para a API
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`Erro na requisição: ${response.status} ${response.statusText}`);
+            }
+            
+            // Converte a resposta para JSON
+            const data = await response.json();
+            
+            if (!data || !data.length) {
+                throw new Error('Nenhum dado recebido da API');
+            }
+            
+            console.log(`Recebidos ${data.length} registros de taxas Selic no intervalo`);
+            
+            // Converte os valores para decimal
+            const historicoCompleto = data.map(item => ({
+                data: item.data,
+                valor: parseFloat(item.valor) / 100 // Converte para decimal
+            }));
+            
+            // Como a API retorna dados diários (ou na frequência da série),
+            // precisamos filtrar apenas os dados mensais de que precisamos
+            
+            // Primeiro, agrupamos por mês para obter apenas um valor por mês
+            // Usamos como chave o Ano-Mês para garantir a unicidade
+            const taxasPorMes = {};
+            
+            historicoCompleto.forEach(item => {
+                const partes = item.data.split('/');
+                const chave = `${partes[2]}-${partes[1]}`; // Ano-Mês
+                
+                // Se já tivermos um registro para este mês, ignoramos
+                // (considerando que o último registro de cada mês é o acumulado do mês)
+                if (!taxasPorMes[chave]) {
+                    taxasPorMes[chave] = item;
+                }
+            });
+            
+            // Convertemos o objeto para array
+            let taxasMensais = Object.values(taxasPorMes);
+            
+            // Ordenamos do mais antigo para o mais recente
+            taxasMensais.sort((a, b) => {
+                const dataA = a.data.split('/').reverse().join('-');
+                const dataB = b.data.split('/').reverse().join('-');
+                return dataA.localeCompare(dataB);
+            });
+            
+            // Limitamos ao número de meses necessários
+            taxasMensais = taxasMensais.slice(-numMeses);
+            
+            console.log(`Filtrados ${taxasMensais.length} meses de dados`);
+            
+            return taxasMensais;
         }
         
         /**
@@ -738,49 +838,58 @@
                 let historicoTaxas;
                 
                 if (usarHistoricoSelic) {
+                    // Mostra mensagem de carregamento
+                    apiStatus.style.display = 'block';
+                    loadingIndicator.style.display = 'inline-block';
+                    
                     // Número de meses anteriores necessários para o cálculo
                     const mesesNecessarios = parcelaAtual - 1;
                     
-                    // Se não temos histórico ou precisamos de mais taxas, busca novamente
-                    if (historicoTaxasSelic.length === 0 || historicoTaxasSelic.length < mesesNecessarios) {
+                    // Se não precisa de histórico, retorna array vazio
+                    if (mesesNecessarios <= 0) {
+                        historicoTaxas = [];
+                    } else {
+                        apiStatus.querySelector('span:not(.loading)').textContent = 
+                            `Buscando histórico de ${mesesNecessarios} meses anteriores da Taxa Selic...`;
+                        
                         try {
-                            // Exibe mensagem de carregamento
-                            apiStatus.style.display = 'block';
-                            loadingIndicator.style.display = 'inline-block';
-                            apiStatus.querySelector('span:not(.loading)').textContent = `Buscando histórico de ${mesesNecessarios} meses anteriores da Taxa Selic...`;
+                            // Busca o histórico de taxas
+                            const historicoCompleto = await buscarHistoricoTaxasSelic(mesesNecessarios);
                             
-                            // Busca exatamente o número de meses necessários (mais uma margem de segurança)
-                            const mesesABuscar = mesesNecessarios + 2; // Margem de segurança
-                            historicoTaxasSelic = await buscarHistoricoTaxasSelic(mesesABuscar);
-                            
-                            // Esconde mensagem de carregamento
-                            apiStatus.style.display = 'none';
-                        } catch (err) {
-                            console.error('Erro ao buscar histórico:', err);
-                            apiStatus.style.display = 'none';
-                            errorMessage.textContent = `Erro ao buscar histórico de taxas: ${err.message}. Usando taxas padrão.`;
+                            // Verifica se temos taxas suficientes
+                            if (historicoCompleto.length < mesesNecessarios) {
+                                console.warn(`Histórico insuficiente: necessários ${mesesNecessarios} meses, mas só temos ${historicoCompleto.length}`);
+                                errorMessage.textContent = `Aviso: Histórico de taxas insuficiente. Usando taxas disponíveis e completando com a taxa atual.`;
+                                errorMessage.style.display = 'block';
+                                
+                                // Pega as taxas disponíveis
+                                const taxasDisponiveis = historicoCompleto.map(item => item.valor);
+                                
+                                // Completa com a taxa atual se necessário
+                                const taxasComplementares = Array(mesesNecessarios - taxasDisponiveis.length).fill(taxaSelicMensal);
+                                
+                                historicoTaxas = [...taxasDisponiveis, ...taxasComplementares];
+                            } else {
+                                // Extraindo apenas os valores das taxas na ordem correta para o cálculo
+                                historicoTaxas = historicoCompleto
+                                    .slice(-mesesNecessarios) // Garante que pegamos os últimos X meses
+                                    .map(item => item.valor);
+                                
+                                // Armazena o histórico completo para exibição
+                                historicoTaxasSelic = historicoCompleto.slice(-mesesNecessarios);
+                            }
+                        } catch (error) {
+                            console.error('Erro ao buscar histórico de taxas:', error);
+                            errorMessage.textContent = `Erro ao buscar histórico de taxas: ${error.message}. Usando taxas padrão.`;
                             errorMessage.style.display = 'block';
+                            
+                            // Em caso de erro, usa a taxa atual para todos os meses
+                            historicoTaxas = Array(mesesNecessarios).fill(taxaSelicMensal);
                         }
                     }
                     
-                    // Obtém as taxas dos meses anteriores
-                    if (historicoTaxasSelic.length >= mesesNecessarios) {
-                        // Usa exatamente o número de meses anteriores necessários
-                        historicoTaxas = historicoTaxasSelic
-                            .slice(0, mesesNecessarios) // Pega apenas os meses necessários
-                            .map(item => item.valor); // Extrai apenas os valores das taxas
-                    } else {
-                        // Se não houver taxas suficientes, exibe aviso e usa as taxas disponíveis
-                        console.warn(`Histórico insuficiente: necessários ${mesesNecessarios} meses, mas só temos ${historicoTaxasSelic.length}`);
-                        errorMessage.textContent = `Aviso: Histórico de taxas insuficiente. Usando taxas disponíveis e completando com a taxa atual.`;
-                        errorMessage.style.display = 'block';
-                        
-                        // Pega as taxas disponíveis e completa com a taxa atual
-                        const taxasDisponiveis = historicoTaxasSelic.map(item => item.valor);
-                        const taxasComplementares = Array(mesesNecessarios - taxasDisponiveis.length).fill(taxaSelicMensal);
-                        
-                        historicoTaxas = [...taxasDisponiveis, ...taxasComplementares];
-                    }
+                    // Esconde mensagem de carregamento
+                    apiStatus.style.display = 'none';
                 } else {
                     // Usa as taxas informadas manualmente
                     historicoTaxas = obterTaxasManuais();
@@ -814,6 +923,9 @@
                 resultadoDiv.scrollIntoView({ behavior: 'smooth' });
                 
             } catch (error) {
+                // Esconde mensagem de carregamento se existir
+                apiStatus.style.display = 'none';
+                
                 // Exibe erro
                 console.error('Erro no cálculo:', error);
                 errorMessage.textContent = `Erro no cálculo: ${error.message}`;
