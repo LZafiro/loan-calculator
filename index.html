@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Financiamento com Taxas Variáveis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        .form-container {
+            background-color: #f7f9fc;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        input, button {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .result-container {
+            background-color: #f7f9fc;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .result-row:last-child {
+            border-bottom: none;
+        }
+        .result-title {
+            font-weight: bold;
+        }
+        .result-value {
+            font-family: monospace;
+        }
+        .taxas-container {
+            margin-top: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 4px;
+        }
+        .taxa-input {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .taxa-input span {
+            width: 80px;
+        }
+        .taxa-input input {
+            flex: 1;
+        }
+        #addTaxa {
+            width: auto;
+            padding: 5px 10px;
+            margin-top: 5px;
+            background-color: #27ae60;
+        }
+        #addTaxa:hover {
+            background-color: #219653;
+        }
+    </style>
+</head>
+<body>
+    <h1>Calculadora de Financiamento com Taxas Variáveis</h1>
+    
+    <div class="form-container">
+        <div class="form-group">
+            <label for="valorTotal">Valor total emprestado (R$):</label>
+            <input type="number" id="valorTotal" min="1" step="0.01" value="50000">
+        </div>
+        
+        <div class="form-group">
+            <label for="totalParcelas">Número total de parcelas:</label>
+            <input type="number" id="totalParcelas" min="1" step="1" value="36">
+        </div>
+        
+        <div class="form-group">
+            <label for="parcelaAtual">Número da parcela atual:</label>
+            <input type="number" id="parcelaAtual" min="1" step="1" value="10">
+        </div>
+        
+        <div class="form-group">
+            <label for="taxaAtual">Taxa de juros mensal atual (%):</label>
+            <input type="number" id="taxaAtual" min="0" step="0.01" value="1.25">
+        </div>
+        
+        <div class="form-group">
+            <label>Histórico de taxas mensais (%):</label>
+            <div id="taxasContainer" class="taxas-container"></div>
+            <button id="addTaxa">Adicionar taxa</button>
+        </div>
+        
+        <button id="calcular">Calcular parcela atual</button>
+    </div>
+    
+    <div id="resultado" class="result-container">
+        <h2>Resultado do cálculo</h2>
+        
+        <div class="result-row">
+            <span class="result-title">Valor da parcela atual:</span>
+            <span id="valorParcela" class="result-value">R$ 0,00</span>
+        </div>
+        
+        <div class="result-row">
+            <span class="result-title">Componente de juros:</span>
+            <span id="valorJuros" class="result-value">R$ 0,00</span>
+        </div>
+        
+        <div class="result-row">
+            <span class="result-title">Componente de amortização:</span>
+            <span id="valorAmortizacao" class="result-value">R$ 0,00</span>
+        </div>
+        
+        <div class="result-row">
+            <span class="result-title">Saldo devedor antes do pagamento:</span>
+            <span id="saldoAntes" class="result-value">R$ 0,00</span>
+        </div>
+        
+        <div class="result-row">
+            <span class="result-title">Saldo devedor após o pagamento:</span>
+            <span id="saldoDepois" class="result-value">R$ 0,00</span>
+        </div>
+        
+        <div class="result-row">
+            <span class="result-title">Parcelas restantes:</span>
+            <span id="parcelasRestantes" class="result-value">0</span>
+        </div>
+    </div>
+    
+    <script>
+        // Funções de cálculo
+        function calcularParcela(valorPresente, numParcelas, taxaMensal) {
+            if (taxaMensal === 0) {
+                return valorPresente / numParcelas;
+            }
+            
+            const numerador = taxaMensal * Math.pow(1 + taxaMensal, numParcelas);
+            const denominador = Math.pow(1 + taxaMensal, numParcelas) - 1;
+            
+            return valorPresente * (numerador / denominador);
+        }
+        
+        function calcularParcelaAtual(valorTotal, parcelaAtual, totalParcelas, taxaAtual, historicoTaxas) {
+            // Validações
+            if (parcelaAtual < 1 || parcelaAtual > totalParcelas) {
+                throw new Error(`A parcela atual (${parcelaAtual}) deve estar entre 1 e ${totalParcelas}.`);
+            }
+            
+            if (historicoTaxas.length < parcelaAtual - 1) {
+                throw new Error(`Histórico de taxas incompleto. São necessárias ${parcelaAtual - 1} taxas históricas, mas foram fornecidas apenas ${historicoTaxas.length}.`);
+            }
+            
+            // Saldo devedor inicial
+            let saldoDevedor = valorTotal;
+            
+            // Simulação das parcelas anteriores
+            for (let i = 0; i < parcelaAtual - 1; i++) {
+                const taxaMes = historicoTaxas[i];
+                
+                // Cálculo de juros do mês
+                const jurosMes = saldoDevedor * taxaMes;
+                
+                // Cálculo da parcela do mês
+                const parcelasRestantes = totalParcelas - i;
+                const valorParcelaMes = calcularParcela(saldoDevedor, parcelasRestantes, taxaMes);
+                
+                // Cálculo da amortização
+                const amortizacaoMes = valorParcelaMes - jurosMes;
+                
+                // Atualização do saldo devedor
+                saldoDevedor -= amortizacaoMes;
+            }
+            
+            // Cálculo da parcela atual
+            const parcelasRestantes = totalParcelas - (parcelaAtual - 1);
+            const valorParcelaAtual = calcularParcela(saldoDevedor, parcelasRestantes, taxaAtual);
+            
+            // Componentes da parcela atual
+            const jurosAtual = saldoDevedor * taxaAtual;
+            const amortizacaoAtual = valorParcelaAtual - jurosAtual;
+            const saldoDevedorAposAtual = saldoDevedor - amortizacaoAtual;
+            
+            // Retorno dos resultados
+            return {
+                valorParcela: valorParcelaAtual,
+                juros: jurosAtual,
+                amortizacao: amortizacaoAtual,
+                saldoDevedorAtual: saldoDevedor,
+                saldoDevedorAposPagamento: saldoDevedorAposAtual,
+                parcelasRestantes: parcelasRestantes
+            };
+        }
+        
+        // Elementos do DOM
+        const taxasContainer = document.getElementById('taxasContainer');
+        const btnAddTaxa = document.getElementById('addTaxa');
+        const btnCalcular = document.getElementById('calcular');
+        const resultadoDiv = document.getElementById('resultado');
+        
+        // Adicionar campos de taxas iniciais
+        function adicionarCamposTaxasIniciais() {
+            // Limpar container
+            taxasContainer.innerHTML = '';
+            
+            // Obter número de parcelas atual
+            const parcelaAtual = parseInt(document.getElementById('parcelaAtual').value, 10);
+            
+            // Adicionar campos de taxas para parcelas anteriores
+            for (let i = 1; i < parcelaAtual; i++) {
+                adicionarCampoTaxa(i);
+            }
+        }
+        
+        // Adicionar campo de taxa
+        function adicionarCampoTaxa(mes) {
+            const taxaDiv = document.createElement('div');
+            taxaDiv.className = 'taxa-input';
+            
+            const mesSpan = document.createElement('span');
+            mesSpan.textContent = `Mês ${mes}:`;
+            
+            const taxaInput = document.createElement('input');
+            taxaInput.type = 'number';
+            taxaInput.min = '0';
+            taxaInput.step = '0.01';
+            taxaInput.value = '1.00';
+            taxaInput.className = 'taxa-input-field';
+            taxaInput.dataset.mes = mes;
+            
+            taxaDiv.appendChild(mesSpan);
+            taxaDiv.appendChild(taxaInput);
+            
+            taxasContainer.appendChild(taxaDiv);
+        }
+        
+        // Obter todas as taxas
+        function obterTaxas() {
+            const taxas = [];
+            const taxasInputs = document.querySelectorAll('.taxa-input-field');
+            
+            taxasInputs.forEach(input => {
+                const valor = parseFloat(input.value) / 100; // Converte percentual para decimal
+                taxas.push(valor);
+            });
+            
+            return taxas;
+        }
+        
+        // Formatar valor monetário
+        function formatarMoeda(valor) {
+            return `R$ ${valor.toFixed(2)}`;
+        }
+        
+        // Calcular e exibir resultados
+        function calcular() {
+            try {
+                // Obter valores
+                const valorTotal = parseFloat(document.getElementById('valorTotal').value);
+                const totalParcelas = parseInt(document.getElementById('totalParcelas').value, 10);
+                const parcelaAtual = parseInt(document.getElementById('parcelaAtual').value, 10);
+                const taxaAtual = parseFloat(document.getElementById('taxaAtual').value) / 100; // Converte percentual para decimal
+                const historicoTaxas = obterTaxas();
+                
+                // Calcular parcela atual
+                const resultado = calcularParcelaAtual(
+                    valorTotal, 
+                    parcelaAtual, 
+                    totalParcelas, 
+                    taxaAtual, 
+                    historicoTaxas
+                );
+                
+                // Exibir resultados
+                document.getElementById('valorParcela').textContent = formatarMoeda(resultado.valorParcela);
+                document.getElementById('valorJuros').textContent = formatarMoeda(resultado.juros);
+                document.getElementById('valorAmortizacao').textContent = formatarMoeda(resultado.amortizacao);
+                document.getElementById('saldoAntes').textContent = formatarMoeda(resultado.saldoDevedorAtual);
+                document.getElementById('saldoDepois').textContent = formatarMoeda(resultado.saldoDevedorAposPagamento);
+                document.getElementById('parcelasRestantes').textContent = resultado.parcelasRestantes;
+                
+                // Mostrar resultados
+                resultadoDiv.style.display = 'block';
+            } catch (erro) {
+                alert(`Erro: ${erro.message}`);
+                console.error(erro);
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('parcelaAtual').addEventListener('change', adicionarCamposTaxasIniciais);
+        btnAddTaxa.addEventListener('click', () => {
+            const numTaxas = document.querySelectorAll('.taxa-input-field').length;
+            adicionarCampoTaxa(numTaxas + 1);
+        });
+        btnCalcular.addEventListener('click', calcular);
+        
+        // Inicialização
+        adicionarCamposTaxasIniciais();
+    </script>
+</body>
+</html>
