@@ -356,12 +356,14 @@
                 console.log(`Recebidos ${data.length} meses de histórico da Taxa Selic`);
                 
                 // Converte os valores para decimal e inverte a ordem (mais antiga primeiro)
+                // A API retorna do mais recente para o mais antigo, então invertemos
+                // para ter a ordem cronológica correta (do mais antigo ao mais recente)
                 const historicoTaxas = data
                     .map(item => ({
                         data: item.data,
                         valor: parseFloat(item.valor) / 100 // Converte para decimal
                     }))
-                    .reverse(); // Inverte a ordem (a API retorna do mais recente para o mais antigo)
+                    .reverse(); 
                 
                 return historicoTaxas;
             } catch (error) {
@@ -370,7 +372,12 @@
                 errorMessage.style.display = 'block';
                 
                 // Em caso de erro, retorna um array com taxas padrão
-                return Array(numMeses).fill(0.009); // 0,90% como taxa padrão
+                const taxasPadrao = Array(numMeses).fill().map(() => ({
+                    data: 'N/D',
+                    valor: 0.009 // 0,90% como taxa padrão
+                }));
+                
+                return taxasPadrao;
             }
         }
         
@@ -731,16 +738,20 @@
                 let historicoTaxas;
                 
                 if (usarHistoricoSelic) {
+                    // Número de meses anteriores necessários para o cálculo
+                    const mesesNecessarios = parcelaAtual - 1;
+                    
                     // Se não temos histórico ou precisamos de mais taxas, busca novamente
-                    if (historicoTaxasSelic.length === 0 || historicoTaxasSelic.length < parcelaAtual - 1) {
+                    if (historicoTaxasSelic.length === 0 || historicoTaxasSelic.length < mesesNecessarios) {
                         try {
                             // Exibe mensagem de carregamento
                             apiStatus.style.display = 'block';
                             loadingIndicator.style.display = 'inline-block';
-                            apiStatus.querySelector('span:not(.loading)').textContent = 'Buscando histórico de taxas Selic...';
+                            apiStatus.querySelector('span:not(.loading)').textContent = `Buscando histórico de ${mesesNecessarios} meses anteriores da Taxa Selic...`;
                             
-                            // Busca o histórico (com margem de segurança)
-                            historicoTaxasSelic = await buscarHistoricoTaxasSelic(parcelaAtual + 5);
+                            // Busca exatamente o número de meses necessários (mais uma margem de segurança)
+                            const mesesABuscar = mesesNecessarios + 2; // Margem de segurança
+                            historicoTaxasSelic = await buscarHistoricoTaxasSelic(mesesABuscar);
                             
                             // Esconde mensagem de carregamento
                             apiStatus.style.display = 'none';
@@ -752,22 +763,21 @@
                         }
                     }
                     
-                    // Obtém as taxas do histórico
-                    const taxasNecessarias = parcelaAtual - 1;
-                    if (historicoTaxasSelic.length >= taxasNecessarias) {
-                        // Obtém as taxas do histórico recebido da API
+                    // Obtém as taxas dos meses anteriores
+                    if (historicoTaxasSelic.length >= mesesNecessarios) {
+                        // Usa exatamente o número de meses anteriores necessários
                         historicoTaxas = historicoTaxasSelic
-                            .slice(0, taxasNecessarias) // Pega apenas as taxas necessárias
+                            .slice(0, mesesNecessarios) // Pega apenas os meses necessários
                             .map(item => item.valor); // Extrai apenas os valores das taxas
                     } else {
                         // Se não houver taxas suficientes, exibe aviso e usa as taxas disponíveis
-                        console.warn(`Histórico insuficiente: necessárias ${taxasNecessarias} taxas, mas só temos ${historicoTaxasSelic.length}`);
+                        console.warn(`Histórico insuficiente: necessários ${mesesNecessarios} meses, mas só temos ${historicoTaxasSelic.length}`);
                         errorMessage.textContent = `Aviso: Histórico de taxas insuficiente. Usando taxas disponíveis e completando com a taxa atual.`;
                         errorMessage.style.display = 'block';
                         
                         // Pega as taxas disponíveis e completa com a taxa atual
                         const taxasDisponiveis = historicoTaxasSelic.map(item => item.valor);
-                        const taxasComplementares = Array(taxasNecessarias - taxasDisponiveis.length).fill(taxaSelicMensal);
+                        const taxasComplementares = Array(mesesNecessarios - taxasDisponiveis.length).fill(taxaSelicMensal);
                         
                         historicoTaxas = [...taxasDisponiveis, ...taxasComplementares];
                     }
@@ -851,13 +861,8 @@
             // Inicia com a configuração correta de histórico
             alternarHistoricoAutomatico();
             
-            // Busca histórico inicial (poucos meses para acelerar o carregamento)
-            try {
-                historicoTaxasSelic = await buscarHistoricoTaxasSelic(5);
-                console.log(`Carregado histórico inicial com ${historicoTaxasSelic.length} meses`);
-            } catch (error) {
-                console.error('Erro ao carregar histórico inicial:', error);
-            }
+            // Não busca histórico inicial - apenas quando necessário
+            // Isso economiza banda e acelera o carregamento inicial
         });
     </script>
 </body>
