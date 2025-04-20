@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calculadora de Financiamento com Taxa Selic Atual</title>
+    <title>Calculadora de Financiamento com Taxa Selic Automática</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -203,7 +203,7 @@
     </style>
 </head>
 <body>
-    <h1>Calculadora de Financiamento com Taxa Selic Atual</h1>
+    <h1>Calculadora de Financiamento com Taxa Selic Automática</h1>
     
     <div id="statusContainer" class="status-container">
         <div id="apiStatus">
@@ -433,54 +433,46 @@
         }
         
         /**
-         * Calcula o valor de uma parcela usando a fórmula de financiamento
-         */
-        function calcularParcela(valorPresente, numParcelas, taxaMensal) {
-            if (taxaMensal === 0) {
-                return valorPresente / numParcelas;
-            }
-            
-            const numerador = taxaMensal * Math.pow(1 + taxaMensal, numParcelas);
-            const denominador = Math.pow(1 + taxaMensal, numParcelas) - 1;
-            
-            return valorPresente * (numerador / denominador);
-        }
-        
-        /**
-         * Calcula o valor da parcela atual com base nos parâmetros fornecidos
+         * Calcula o valor da parcela atual em um financiamento com taxas variáveis
+         * @param {number} valorTotal - Valor total emprestado inicialmente
+         * @param {number} parcelaAtual - Número da parcela atual (começando em 1)
+         * @param {number} totalParcelas - Número total de parcelas
+         * @param {number} taxaAtual - Taxa de juros mensal atual (em decimal, ex: 0.01 para 1%)
+         * @param {Array<number>} historicoTaxas - Array com histórico de taxas mensais desde o mês 1
+         * @returns {Object} Informações sobre a parcela atual e saldo
          */
         function calcularParcelaAtual(valorTotal, parcelaAtual, totalParcelas, taxaAtual, historicoTaxas) {
-            // Validações
+            // Validações de entrada
             if (parcelaAtual < 1 || parcelaAtual > totalParcelas) {
-                throw new Error(`A parcela atual (${parcelaAtual}) deve estar entre 1 e ${totalParcelas}`);
+                throw new Error(`Parcela atual (${parcelaAtual}) deve estar entre 1 e ${totalParcelas}`);
             }
             
             if (historicoTaxas.length < parcelaAtual - 1) {
-                throw new Error(`Histórico de taxas incompleto. São necessárias ${parcelaAtual - 1} taxas históricas, mas foram fornecidas apenas ${historicoTaxas.length}`);
+                throw new Error(`Histórico de taxas incompleto. Esperado ${parcelaAtual - 1} taxas, recebido ${historicoTaxas.length}`);
             }
             
-            // Saldo devedor inicial
+            // Saldo devedor inicial é o valor total emprestado
             let saldoDevedor = valorTotal;
             
-            // Simula as parcelas anteriores
+            // Simula as parcelas anteriores para calcular o saldo devedor atual
             for (let i = 0; i < parcelaAtual - 1; i++) {
                 const taxaMes = historicoTaxas[i];
                 
                 // Calcula juros do mês
                 const jurosMes = saldoDevedor * taxaMes;
                 
-                // Calcula parcela do mês
+                // Calcula parcela do mês usando a taxa daquele mês e parcelas restantes
                 const parcelasRestantes = totalParcelas - i;
                 const valorParcelaMes = calcularParcela(saldoDevedor, parcelasRestantes, taxaMes);
                 
-                // Calcula amortização
+                // Calcula amortização (parcela menos juros)
                 const amortizacaoMes = valorParcelaMes - jurosMes;
                 
                 // Atualiza saldo devedor
                 saldoDevedor -= amortizacaoMes;
             }
             
-            // Calcula parcela atual
+            // Calcula parcela atual com base no saldo devedor atual
             const parcelasRestantes = totalParcelas - (parcelaAtual - 1);
             const valorParcelaAtual = calcularParcela(saldoDevedor, parcelasRestantes, taxaAtual);
             
@@ -489,16 +481,39 @@
             const amortizacaoAtual = valorParcelaAtual - jurosAtual;
             const saldoDevedorAposAtual = saldoDevedor - amortizacaoAtual;
             
-            // Retorna resultados
+            // Retorna informações detalhadas
             return {
                 valorParcela: valorParcelaAtual,
                 juros: jurosAtual,
                 amortizacao: amortizacaoAtual,
                 saldoDevedorAtual: saldoDevedor,
                 saldoDevedorAposPagamento: saldoDevedorAposAtual,
+                parcelaAtual: parcelaAtual,
                 parcelasRestantes: parcelasRestantes,
                 taxaUtilizada: taxaAtual
             };
+        }
+        
+        /**
+         * Calcula o valor de uma parcela usando a fórmula de financiamento
+         * PMT = PV * [r(1+r)^n] / [(1+r)^n - 1]
+         * 
+         * @param {number} valorPresente - Valor presente (saldo devedor)
+         * @param {number} numParcelas - Número de parcelas restantes
+         * @param {number} taxaMensal - Taxa de juros mensal (em decimal)
+         * @returns {number} Valor da parcela
+         */
+        function calcularParcela(valorPresente, numParcelas, taxaMensal) {
+            // Se taxa zero, divide igualmente
+            if (taxaMensal === 0) {
+                return valorPresente / numParcelas;
+            }
+            
+            // Aplica fórmula de financiamento
+            const numerador = taxaMensal * Math.pow(1 + taxaMensal, numParcelas);
+            const denominador = Math.pow(1 + taxaMensal, numParcelas) - 1;
+            
+            return valorPresente * (numerador / denominador);
         }
         
         /**
@@ -542,9 +557,9 @@
         }
         
         /**
-         * Obtém todas as taxas do histórico
+         * Obtém todas as taxas do histórico a partir dos campos manuais
          */
-        function obterTaxas() {
+        function obterTaxasManuais() {
             const taxas = [];
             const taxasInputs = document.querySelectorAll('.taxa-input-field');
             
@@ -554,6 +569,125 @@
             });
             
             return taxas;
+        }
+        
+        /**
+         * Exibe o histórico de taxas na interface
+         * @param {Array} taxasUtilizadas - Array com as taxas utilizadas no cálculo
+         * @param {boolean} usouHistoricoAutomatico - Indica se usou histórico automático
+         */
+        function exibirHistoricoTaxas(taxasUtilizadas, usouHistoricoAutomatico) {
+            // Remove qualquer histórico anterior
+            const historicoAnterior = document.getElementById('historico-taxas');
+            if (historicoAnterior) {
+                historicoAnterior.remove();
+            }
+            
+            // Cria uma tabela para exibir o histórico
+            const historicoDiv = document.createElement('div');
+            historicoDiv.className = 'historico-info';
+            historicoDiv.id = 'historico-taxas';
+            
+            const titulo = usouHistoricoAutomatico 
+                ? '<h3>Histórico de Taxas Selic Utilizadas (Automático)</h3>'
+                : '<h3>Histórico de Taxas Utilizadas (Manual)</h3>';
+                
+            historicoDiv.innerHTML = titulo;
+            
+            const table = document.createElement('table');
+            table.className = 'historico-table';
+            
+            // Cabeçalho da tabela
+            const thead = document.createElement('thead');
+            if (usouHistoricoAutomatico && historicoTaxasSelic.length > 0) {
+                thead.innerHTML = `
+                    <tr>
+                        <th>Mês/Parcela</th>
+                        <th>Data de Referência</th>
+                        <th>Taxa Mensal</th>
+                    </tr>
+                `;
+            } else {
+                thead.innerHTML = `
+                    <tr>
+                        <th>Mês/Parcela</th>
+                        <th>Taxa Mensal</th>
+                    </tr>
+                `;
+            }
+            table.appendChild(thead);
+            
+            // Corpo da tabela
+            const tbody = document.createElement('tbody');
+            
+            // Obtém as taxas necessárias para a parcela atual
+            const parcelaAtual = parseInt(document.getElementById('parcelaAtual').value, 10);
+            
+            // Adiciona as taxas históricas na tabela
+            if (usouHistoricoAutomatico && historicoTaxasSelic.length > 0) {
+                for (let i = 0; i < taxasUtilizadas.length; i++) {
+                    const tr = document.createElement('tr');
+                    
+                    if (i < historicoTaxasSelic.length) {
+                        // Taxa do histórico automático
+                        tr.innerHTML = `
+                            <td>Mês ${i + 1}</td>
+                            <td>${historicoTaxasSelic[i].data}</td>
+                            <td>${formatarPercentual(taxasUtilizadas[i])}</td>
+                        `;
+                    } else {
+                        // Taxa complementar (caso faltem taxas no histórico)
+                        tr.innerHTML = `
+                            <td>Mês ${i + 1}</td>
+                            <td>N/D (taxa atual utilizada)</td>
+                            <td>${formatarPercentual(taxasUtilizadas[i])}</td>
+                        `;
+                    }
+                    
+                    tbody.appendChild(tr);
+                }
+            } else {
+                // Taxas manuais
+                for (let i = 0; i < taxasUtilizadas.length; i++) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>Mês ${i + 1}</td>
+                        <td>${formatarPercentual(taxasUtilizadas[i])}</td>
+                    `;
+                    tbody.appendChild(tr);
+                }
+            }
+            
+            // Adiciona a taxa atual
+            const trAtual = document.createElement('tr');
+            trAtual.style.fontWeight = 'bold';
+            trAtual.style.backgroundColor = '#e9f5ff';
+            
+            if (usouHistoricoAutomatico && historicoTaxasSelic.length > 0) {
+                const usarSelicValue = document.getElementById('usarSelic').value;
+                const taxaAtual = usarSelicValue === 'selic' ? taxaSelicMensal : parseFloat(document.getElementById('taxaManual').value) / 100;
+                
+                trAtual.innerHTML = `
+                    <td>Parcela Atual (${parcelaAtual})</td>
+                    <td>ATUAL</td>
+                    <td>${formatarPercentual(taxaAtual)}</td>
+                `;
+            } else {
+                const usarSelicValue = document.getElementById('usarSelic').value;
+                const taxaAtual = usarSelicValue === 'selic' ? taxaSelicMensal : parseFloat(document.getElementById('taxaManual').value) / 100;
+                
+                trAtual.innerHTML = `
+                    <td>Parcela Atual (${parcelaAtual})</td>
+                    <td>${formatarPercentual(taxaAtual)}</td>
+                `;
+            }
+            
+            tbody.appendChild(trAtual);
+            table.appendChild(tbody);
+            historicoDiv.appendChild(table);
+            
+            // Adiciona a tabela abaixo do resultado
+            resultadoDiv.appendChild(historicoDiv);
         }
         
         /**
@@ -593,7 +727,7 @@
                     taxaAtual = parseFloat(document.getElementById('taxaManual').value) / 100;
                 }
                 
-                // Obtém histórico de taxas
+                // Obter histórico de taxas
                 let historicoTaxas;
                 
                 if (usarHistoricoSelic) {
@@ -619,7 +753,24 @@
                     }
                     
                     // Obtém as taxas do histórico
-                    historicoTaxas = obterTaxasHistorico();
+                    const taxasNecessarias = parcelaAtual - 1;
+                    if (historicoTaxasSelic.length >= taxasNecessarias) {
+                        // Obtém as taxas do histórico recebido da API
+                        historicoTaxas = historicoTaxasSelic
+                            .slice(0, taxasNecessarias) // Pega apenas as taxas necessárias
+                            .map(item => item.valor); // Extrai apenas os valores das taxas
+                    } else {
+                        // Se não houver taxas suficientes, exibe aviso e usa as taxas disponíveis
+                        console.warn(`Histórico insuficiente: necessárias ${taxasNecessarias} taxas, mas só temos ${historicoTaxasSelic.length}`);
+                        errorMessage.textContent = `Aviso: Histórico de taxas insuficiente. Usando taxas disponíveis e completando com a taxa atual.`;
+                        errorMessage.style.display = 'block';
+                        
+                        // Pega as taxas disponíveis e completa com a taxa atual
+                        const taxasDisponiveis = historicoTaxasSelic.map(item => item.valor);
+                        const taxasComplementares = Array(taxasNecessarias - taxasDisponiveis.length).fill(taxaSelicMensal);
+                        
+                        historicoTaxas = [...taxasDisponiveis, ...taxasComplementares];
+                    }
                 } else {
                     // Usa as taxas informadas manualmente
                     historicoTaxas = obterTaxasManuais();
