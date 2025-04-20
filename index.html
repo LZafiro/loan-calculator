@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calculadora de Financiamento com Taxas Variáveis</title>
+    <title>Calculadora de Financiamento com Taxa Selic Atual</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -11,35 +11,44 @@
             margin: 0 auto;
             padding: 20px;
             line-height: 1.6;
+            color: #333;
+            background-color: #f8f9fa;
         }
-        h1 {
-            color: #2c3e50;
+        
+        h1, h2 {
+            color: #0066cc;
             margin-bottom: 20px;
         }
-        .form-container {
-            background-color: #f7f9fc;
+        
+        .form-container, .result-container {
+            background-color: white;
             border-radius: 8px;
             padding: 20px;
             margin-bottom: 20px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
+        
         .form-group {
             margin-bottom: 15px;
         }
+        
         label {
             display: block;
             font-weight: bold;
             margin-bottom: 5px;
         }
-        input, button {
-            padding: 8px 12px;
+        
+        input, button, select {
+            padding: 10px 12px;
             border-radius: 4px;
             border: 1px solid #ddd;
             width: 100%;
             box-sizing: border-box;
+            font-size: 16px;
         }
+        
         button {
-            background-color: #3498db;
+            background-color: #0066cc;
             color: white;
             border: none;
             font-weight: bold;
@@ -47,16 +56,11 @@
             margin-top: 10px;
             transition: background-color 0.3s;
         }
+        
         button:hover {
-            background-color: #2980b9;
+            background-color: #0052a3;
         }
-        .result-container {
-            background-color: #f7f9fc;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            display: none;
-        }
+        
         .result-row {
             display: flex;
             justify-content: space-between;
@@ -64,15 +68,20 @@
             padding-bottom: 10px;
             border-bottom: 1px solid #eee;
         }
+        
         .result-row:last-child {
             border-bottom: none;
         }
+        
         .result-title {
             font-weight: bold;
         }
+        
         .result-value {
             font-family: monospace;
+            font-size: 16px;
         }
+        
         .taxas-container {
             margin-top: 15px;
             max-height: 200px;
@@ -82,30 +91,86 @@
             background-color: #fff;
             border-radius: 4px;
         }
+        
         .taxa-input {
             display: flex;
             align-items: center;
             margin-bottom: 5px;
         }
+        
         .taxa-input span {
             width: 80px;
         }
+        
         .taxa-input input {
             flex: 1;
         }
+        
         #addTaxa {
             width: auto;
-            padding: 5px 10px;
+            padding: 8px 12px;
             margin-top: 5px;
-            background-color: #27ae60;
+            background-color: #28a745;
         }
+        
         #addTaxa:hover {
-            background-color: #219653;
+            background-color: #218838;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0, 102, 204, 0.3);
+            border-radius: 50%;
+            border-top-color: #0066cc;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .status-container {
+            margin-bottom: 20px;
+            padding: 10px 15px;
+            border-radius: 4px;
+            background-color: #e9f5ff;
+            border-left: 4px solid #0066cc;
+        }
+        
+        .status-selic {
+            font-weight: bold;
+            color: #0066cc;
+        }
+        
+        .error-message {
+            color: #dc3545;
+            background-color: #f8d7da;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border-left: 4px solid #dc3545;
+            display: none;
         }
     </style>
 </head>
 <body>
-    <h1>Calculadora de Financiamento com Taxas Variáveis</h1>
+    <h1>Calculadora de Financiamento com Taxa Selic Atual</h1>
+    
+    <div id="statusContainer" class="status-container">
+        <div id="apiStatus">
+            <span id="loadingIndicator" class="loading"></span>
+            <span>Buscando taxa Selic atual do Banco Central do Brasil...</span>
+        </div>
+        <div id="selicInfo" style="display: none;">
+            Taxa Selic atual: <span id="selicValue" class="status-selic">0,00%</span> ao mês
+        </div>
+    </div>
+    
+    <div id="errorMessage" class="error-message"></div>
     
     <div class="form-container">
         <div class="form-group">
@@ -124,20 +189,28 @@
         </div>
         
         <div class="form-group">
-            <label for="taxaAtual">Taxa de juros mensal atual (%):</label>
-            <input type="number" id="taxaAtual" min="0" step="0.01" value="1.25">
+            <label for="usarSelic">Usar taxa de juros:</label>
+            <select id="usarSelic">
+                <option value="selic">Taxa Selic atual</option>
+                <option value="manual">Taxa manual</option>
+            </select>
+        </div>
+        
+        <div id="taxaManualContainer" class="form-group" style="display: none;">
+            <label for="taxaManual">Taxa de juros mensal manual (%):</label>
+            <input type="number" id="taxaManual" min="0" step="0.01" value="1.00">
         </div>
         
         <div class="form-group">
             <label>Histórico de taxas mensais (%):</label>
             <div id="taxasContainer" class="taxas-container"></div>
-            <button id="addTaxa">Adicionar taxa</button>
+            <button id="addTaxa" type="button">Adicionar taxa</button>
         </div>
         
-        <button id="calcular">Calcular parcela atual</button>
+        <button id="calcular" type="button">Calcular parcela atual</button>
     </div>
     
-    <div id="resultado" class="result-container">
+    <div id="resultado" class="result-container" style="display: none;">
         <h2>Resultado do cálculo</h2>
         
         <div class="result-row">
@@ -169,10 +242,93 @@
             <span class="result-title">Parcelas restantes:</span>
             <span id="parcelasRestantes" class="result-value">0</span>
         </div>
+        
+        <div class="result-row">
+            <span class="result-title">Taxa utilizada:</span>
+            <span id="taxaUtilizada" class="result-value">0,00%</span>
+        </div>
     </div>
     
     <script>
-        // Funções de cálculo
+        // Variáveis globais
+        let taxaSelicMensal = 0;
+        let selicCarregada = false;
+        
+        // Elementos DOM
+        const statusContainer = document.getElementById('statusContainer');
+        const apiStatus = document.getElementById('apiStatus');
+        const selicInfo = document.getElementById('selicInfo');
+        const selicValue = document.getElementById('selicValue');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const errorMessage = document.getElementById('errorMessage');
+        const usarSelic = document.getElementById('usarSelic');
+        const taxaManualContainer = document.getElementById('taxaManualContainer');
+        const taxasContainer = document.getElementById('taxasContainer');
+        const btnAddTaxa = document.getElementById('addTaxa');
+        const btnCalcular = document.getElementById('calcular');
+        const resultadoDiv = document.getElementById('resultado');
+        
+        /**
+         * Função para buscar a taxa Selic mensal da API do Banco Central do Brasil
+         */
+        async function buscarTaxaSelicMensal() {
+            try {
+                // URL da API do Banco Central - Busca a taxa Selic acumulada no mês
+                const url = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs.4390/dados/ultimos/1?formato=json';
+                
+                // Faz a requisição para a API
+                const response = await fetch(url);
+                
+                // Verifica se a resposta foi bem-sucedida
+                if (!response.ok) {
+                    throw new Error(`Erro na requisição: ${response.status} ${response.statusText}`);
+                }
+                
+                // Converte a resposta para JSON
+                const data = await response.json();
+                
+                // Verifica se há dados
+                if (!data || !data.length) {
+                    throw new Error('Nenhum dado recebido da API');
+                }
+                
+                // Extrai e converte a taxa Selic mensal para decimal
+                const taxaMensal = parseFloat(data[0].valor) / 100;
+                console.log(`Taxa Selic mensal: ${taxaMensal.toFixed(6)} (${data[0].data})`);
+                
+                // Exibe a data da taxa na interface
+                const dataFormatada = data[0].data;
+                
+                // Atualiza a interface
+                selicInfo.innerHTML = `Taxa Selic atual: <span id="selicValue" class="status-selic">${(taxaMensal * 100).toFixed(2)}%</span> ao mês <small>(referência: ${dataFormatada})</small>`;
+                apiStatus.style.display = 'none';
+                selicInfo.style.display = 'block';
+                
+                // Atualiza variáveis globais
+                taxaSelicMensal = taxaMensal;
+                selicCarregada = true;
+                
+                return taxaMensal;
+            } catch (error) {
+                // Em caso de erro, exibe mensagem e usa uma taxa padrão
+                console.error('Erro ao buscar taxa Selic:', error);
+                errorMessage.textContent = `Erro ao buscar taxa Selic: ${error.message}. Usando taxa padrão de 0,90% ao mês.`;
+                errorMessage.style.display = 'block';
+                apiStatus.style.display = 'none';
+                selicInfo.style.display = 'block';
+                selicInfo.innerHTML = `Taxa Selic atual: <span id="selicValue" class="status-selic">0,90% (padrão)</span> ao mês`;
+                
+                // Atualiza variáveis globais com valores padrão
+                taxaSelicMensal = 0.009; // 0,90% ao mês
+                selicCarregada = true;
+                
+                return taxaSelicMensal;
+            }
+        }
+        
+        /**
+         * Calcula o valor de uma parcela usando a fórmula de financiamento
+         */
         function calcularParcela(valorPresente, numParcelas, taxaMensal) {
             if (taxaMensal === 0) {
                 return valorPresente / numParcelas;
@@ -184,78 +340,80 @@
             return valorPresente * (numerador / denominador);
         }
         
+        /**
+         * Calcula o valor da parcela atual com base nos parâmetros fornecidos
+         */
         function calcularParcelaAtual(valorTotal, parcelaAtual, totalParcelas, taxaAtual, historicoTaxas) {
             // Validações
             if (parcelaAtual < 1 || parcelaAtual > totalParcelas) {
-                throw new Error(`A parcela atual (${parcelaAtual}) deve estar entre 1 e ${totalParcelas}.`);
+                throw new Error(`A parcela atual (${parcelaAtual}) deve estar entre 1 e ${totalParcelas}`);
             }
             
             if (historicoTaxas.length < parcelaAtual - 1) {
-                throw new Error(`Histórico de taxas incompleto. São necessárias ${parcelaAtual - 1} taxas históricas, mas foram fornecidas apenas ${historicoTaxas.length}.`);
+                throw new Error(`Histórico de taxas incompleto. São necessárias ${parcelaAtual - 1} taxas históricas, mas foram fornecidas apenas ${historicoTaxas.length}`);
             }
             
             // Saldo devedor inicial
             let saldoDevedor = valorTotal;
             
-            // Simulação das parcelas anteriores
+            // Simula as parcelas anteriores
             for (let i = 0; i < parcelaAtual - 1; i++) {
                 const taxaMes = historicoTaxas[i];
                 
-                // Cálculo de juros do mês
+                // Calcula juros do mês
                 const jurosMes = saldoDevedor * taxaMes;
                 
-                // Cálculo da parcela do mês
+                // Calcula parcela do mês
                 const parcelasRestantes = totalParcelas - i;
                 const valorParcelaMes = calcularParcela(saldoDevedor, parcelasRestantes, taxaMes);
                 
-                // Cálculo da amortização
+                // Calcula amortização
                 const amortizacaoMes = valorParcelaMes - jurosMes;
                 
-                // Atualização do saldo devedor
+                // Atualiza saldo devedor
                 saldoDevedor -= amortizacaoMes;
             }
             
-            // Cálculo da parcela atual
+            // Calcula parcela atual
             const parcelasRestantes = totalParcelas - (parcelaAtual - 1);
             const valorParcelaAtual = calcularParcela(saldoDevedor, parcelasRestantes, taxaAtual);
             
-            // Componentes da parcela atual
+            // Calcula componentes da parcela atual
             const jurosAtual = saldoDevedor * taxaAtual;
             const amortizacaoAtual = valorParcelaAtual - jurosAtual;
             const saldoDevedorAposAtual = saldoDevedor - amortizacaoAtual;
             
-            // Retorno dos resultados
+            // Retorna resultados
             return {
                 valorParcela: valorParcelaAtual,
                 juros: jurosAtual,
                 amortizacao: amortizacaoAtual,
                 saldoDevedorAtual: saldoDevedor,
                 saldoDevedorAposPagamento: saldoDevedorAposAtual,
-                parcelasRestantes: parcelasRestantes
+                parcelasRestantes: parcelasRestantes,
+                taxaUtilizada: taxaAtual
             };
         }
         
-        // Elementos do DOM
-        const taxasContainer = document.getElementById('taxasContainer');
-        const btnAddTaxa = document.getElementById('addTaxa');
-        const btnCalcular = document.getElementById('calcular');
-        const resultadoDiv = document.getElementById('resultado');
-        
-        // Adicionar campos de taxas iniciais
+        /**
+         * Adiciona campos de taxas iniciais com base no número da parcela atual
+         */
         function adicionarCamposTaxasIniciais() {
-            // Limpar container
+            // Limpa o container
             taxasContainer.innerHTML = '';
             
-            // Obter número de parcelas atual
+            // Obtém o número da parcela atual
             const parcelaAtual = parseInt(document.getElementById('parcelaAtual').value, 10);
             
-            // Adicionar campos de taxas para parcelas anteriores
+            // Adiciona campos para as parcelas anteriores
             for (let i = 1; i < parcelaAtual; i++) {
                 adicionarCampoTaxa(i);
             }
         }
         
-        // Adicionar campo de taxa
+        /**
+         * Adiciona um campo de taxa para um mês específico
+         */
         function adicionarCampoTaxa(mes) {
             const taxaDiv = document.createElement('div');
             taxaDiv.className = 'taxa-input';
@@ -267,7 +425,7 @@
             taxaInput.type = 'number';
             taxaInput.min = '0';
             taxaInput.step = '0.01';
-            taxaInput.value = '1.00';
+            taxaInput.value = '0.90';
             taxaInput.className = 'taxa-input-field';
             taxaInput.dataset.mes = mes;
             
@@ -277,7 +435,9 @@
             taxasContainer.appendChild(taxaDiv);
         }
         
-        // Obter todas as taxas
+        /**
+         * Obtém todas as taxas do histórico
+         */
         function obterTaxas() {
             const taxas = [];
             const taxasInputs = document.querySelectorAll('.taxa-input-field');
@@ -290,27 +450,48 @@
             return taxas;
         }
         
-        // Formatar valor monetário
+        /**
+         * Formata valor monetário
+         */
         function formatarMoeda(valor) {
-            return `R$ ${valor.toFixed(2)}`;
+            return `R$ ${valor.toFixed(2)}`.replace('.', ',');
         }
         
-        // Calcular e exibir resultados
+        /**
+         * Formata percentual
+         */
+        function formatarPercentual(valor) {
+            return `${(valor * 100).toFixed(2)}%`.replace('.', ',');
+        }
+        
+        /**
+         * Calcula e exibe o resultado
+         */
         function calcular() {
             try {
-                // Obter valores
+                // Obter valores do formulário
                 const valorTotal = parseFloat(document.getElementById('valorTotal').value);
                 const totalParcelas = parseInt(document.getElementById('totalParcelas').value, 10);
                 const parcelaAtual = parseInt(document.getElementById('parcelaAtual').value, 10);
-                const taxaAtual = parseFloat(document.getElementById('taxaAtual').value) / 100; // Converte percentual para decimal
+                const usarSelicValue = document.getElementById('usarSelic').value;
+                
+                // Determinar a taxa atual a ser utilizada
+                let taxaAtual;
+                if (usarSelicValue === 'selic') {
+                    taxaAtual = taxaSelicMensal;
+                } else {
+                    taxaAtual = parseFloat(document.getElementById('taxaManual').value) / 100;
+                }
+                
+                // Obter histórico de taxas
                 const historicoTaxas = obterTaxas();
                 
                 // Calcular parcela atual
                 const resultado = calcularParcelaAtual(
-                    valorTotal, 
-                    parcelaAtual, 
-                    totalParcelas, 
-                    taxaAtual, 
+                    valorTotal,
+                    parcelaAtual,
+                    totalParcelas,
+                    taxaAtual,
                     historicoTaxas
                 );
                 
@@ -321,16 +502,32 @@
                 document.getElementById('saldoAntes').textContent = formatarMoeda(resultado.saldoDevedorAtual);
                 document.getElementById('saldoDepois').textContent = formatarMoeda(resultado.saldoDevedorAposPagamento);
                 document.getElementById('parcelasRestantes').textContent = resultado.parcelasRestantes;
+                document.getElementById('taxaUtilizada').textContent = formatarPercentual(resultado.taxaUtilizada);
                 
-                // Mostrar resultados
+                // Mostrar div de resultado
                 resultadoDiv.style.display = 'block';
-            } catch (erro) {
-                alert(`Erro: ${erro.message}`);
-                console.error(erro);
+                
+                // Rolar até o resultado
+                resultadoDiv.scrollIntoView({ behavior: 'smooth' });
+                
+            } catch (error) {
+                // Exibe erro
+                errorMessage.textContent = `Erro no cálculo: ${error.message}`;
+                errorMessage.style.display = 'block';
+                resultadoDiv.style.display = 'none';
             }
         }
         
+        /**
+         * Alternar entre taxa Selic e taxa manual
+         */
+        function alternarTaxaManual() {
+            const usarSelicValue = usarSelic.value;
+            taxaManualContainer.style.display = usarSelicValue === 'manual' ? 'block' : 'none';
+        }
+        
         // Event listeners
+        usarSelic.addEventListener('change', alternarTaxaManual);
         document.getElementById('parcelaAtual').addEventListener('change', adicionarCamposTaxasIniciais);
         btnAddTaxa.addEventListener('click', () => {
             const numTaxas = document.querySelectorAll('.taxa-input-field').length;
@@ -339,7 +536,13 @@
         btnCalcular.addEventListener('click', calcular);
         
         // Inicialização
-        adicionarCamposTaxasIniciais();
+        window.addEventListener('DOMContentLoaded', async () => {
+            // Busca taxa Selic atual
+            await buscarTaxaSelicMensal();
+            
+            // Adiciona campos de taxas iniciais
+            adicionarCamposTaxasIniciais();
+        });
     </script>
 </body>
 </html>
